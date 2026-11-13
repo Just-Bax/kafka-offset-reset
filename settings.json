@@ -13,6 +13,8 @@
   "kafkaSaslOauthbearerScope": "copy from the kafka-bulk-consumer module",
   "kafkaSslCa": "",
 
+  "resetId": "2026-11-13-1",
+
   "targets": [
     {
       "topic": "kafkaTopic of the consumer module",

@@ -5,3 +5,4 @@ settings_local.json
 settings.local.json
 ihub_parameters.json
 *.pem
+reset_done.json

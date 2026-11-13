@@ -10,7 +10,9 @@ Per target (topic + groupId + to):
      at or after a timestamp (latest when nothing is that new)
   3. set the group's offsets with the AdminClient, read them back and log before/after
 
-Stop the consumer module first, run this one, then start the consumer again.
+Modules only run on their schedule, so every target is reset once per `resetId`: the
+done targets are kept in reset_done.json in the working directory and skipped on later
+runs. A target that failed (for example a group still active) is tried again next run.
 """
 
 import json
@@ -33,6 +35,7 @@ except ImportError:
 MODULE_VERSION = '1.0'
 IDLE_STATES = (ConsumerGroupState.EMPTY, ConsumerGroupState.DEAD)
 NO_OFFSET = -1001
+DONE_FILE = Path('reset_done.json')
 
 _cert_files = []
 
@@ -192,6 +195,25 @@ def reset_target(log, admin, target, timeout):
              {'topic': topic, 'group': group, 'to': to, 'partitions': rows})
 
 
+# ---------------------------------------------------------------- run once per resetId
+
+def target_key(target):
+    return f'{target["topic"]}|{target["groupId"]}|{str(target.get("to") or "latest").strip()}'
+
+
+def load_done(reset_id):
+    if not DONE_FILE.exists():
+        return set()
+    with open(DONE_FILE) as f:
+        state = json.load(f)
+    return set(state['done']) if state.get('resetId') == reset_id else set()
+
+
+def save_done(reset_id, done):
+    with open(DONE_FILE, 'w') as f:
+        json.dump({'resetId': reset_id, 'done': sorted(done)}, f, indent=1)
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -212,14 +234,28 @@ def main():
     log = Log(module_log)
     timeout = float(settings.get('adminTimeoutSec', 30))
     targets = settings['targets']
-    log.info(f'kafka-offset-reset {MODULE_VERSION}, {len(targets)} target(s)')
+    reset_id = str(settings.get('resetId') or '').strip()
+    if not reset_id:
+        raise ValueError('resetId is required: set it to any new text (for example today\'s date) '
+                         'for every new reset')
+
+    done = load_done(reset_id)
+    save_done(reset_id, done)  # fail here, before any offset moves, if the folder is not writable
+    todo = [t for t in targets if target_key(t) not in done]
+    log.info(f'kafka-offset-reset {MODULE_VERSION}, resetId {reset_id}: {len(targets)} target(s), '
+             f'{len(targets) - len(todo)} already done, {len(todo)} to reset')
+    if not todo:
+        log.info('nothing to do: disable this module, or change resetId to reset again')
+        return
 
     admin = AdminClient(kafka_auth_config(settings))
     failures = 0
     try:
-        for target in targets:
+        for target in todo:
             try:
                 reset_target(log, admin, target, timeout)
+                done.add(target_key(target))
+                save_done(reset_id, done)
             except Exception as e:
                 failures += 1
                 log.error(f'{target.get("groupId")} on {target.get("topic")}: {e}')
@@ -230,7 +266,8 @@ def main():
             except Exception:
                 pass
 
-    log.info(f'finished, {failures} target(s) failed')
+    log.info(f'finished, {failures} target(s) failed'
+             + (', they are tried again next run' if failures else ': disable this module'))
     if failures:
         sys.exit(1)
 
