@@ -1,0 +1,25 @@
+{
+  "ovAccessKey": "your-access-key",
+  "ovSecretKey": "***",
+
+  "kafkaBootstrapServers": "copy from the kafka-bulk-consumer module",
+  "kafkaAuthType": "SASL_OAUTH2",
+  "kafkaSecurityProtocol": "SASL_SSL",
+  "kafkaSaslMechanism": "OAUTHBEARER",
+  "kafkaSaslOauthbearerMethod": "oidc",
+  "kafkaSaslOauthbearerClientId": "copy from the kafka-bulk-consumer module",
+  "kafkaSaslOauthbearerClientSecret": "***",
+  "kafkaSaslOauthbearerTokenEndpointUrl": "***",
+  "kafkaSaslOauthbearerScope": "copy from the kafka-bulk-consumer module",
+  "kafkaSslCa": "",
+
+  "targets": [
+    {
+      "topic": "kafkaTopic of the consumer module",
+      "groupId": "kafkaGroupId of the consumer module",
+      "to": "latest"
+    }
+  ],
+
+  "adminTimeoutSec": 30
+}
